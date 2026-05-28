@@ -18,6 +18,7 @@ from riptide_editor.game_info import (
     MESSAGES,
     entity_sprite_name,
     shootable_sprite_name,
+    shootable_drop_name,
     ENTITY_INFO,
     SHOOTABLE_INFO,
 )
@@ -39,6 +40,12 @@ SPECIAL_TRIGGER_SLOTS = list(range(0, 10)) + list(range(10, 38))
 MESSAGE_POSITION_TO_CONTENT = {30: 31, 32: 33, 34: 35, 36: 37}
 MESSAGE_CONTENT_TO_POSITION = {v: k for k, v in MESSAGE_POSITION_TO_CONTENT.items()}
 MESSAGE_CONTENT_SLOTS = set(MESSAGE_CONTENT_TO_POSITION)
+ERASE_TILE_ID = 256
+
+
+def object_display_name(kind: str, object_id: int, name: str) -> str:
+    drop = shootable_drop_name(object_id) if kind == "shootable" else ""
+    return f"{name} -> {drop}" if drop else name
 
 
 class DrRiptideEditor(tk.Tk):
@@ -79,6 +86,7 @@ class DrRiptideEditor(tk.Tk):
         self.last_selected_cell: tuple[int, int] | None = None
         self.map_photo: ImageTk.PhotoImage | None = None
         self.tile_atlas_photo: ImageTk.PhotoImage | None = None
+        self.asset_tile_atlas_photo: ImageTk.PhotoImage | None = None
         self.rendered_map: Image.Image | None = None
         self.map_base_image: Image.Image | None = None
         self.map_base_key: tuple[int, int] | None = None
@@ -87,9 +95,10 @@ class DrRiptideEditor(tk.Tk):
         self._atlas_refs: list[ImageTk.PhotoImage] = []
         self._preview_photo: ImageTk.PhotoImage | None = None
         self._preview_items: list[int] = []
-        self._drag_seen: set[tuple[str, int, int]] = set()
+        self._drag_seen: set[tuple] = set()
         self._refresh_after_id: str | None = None
         self._metadata_after_id: str | None = None
+        self._atlas_resize_after_id: str | None = None
         self.map_entries = []
 
         self._build_ui()
@@ -158,7 +167,9 @@ class DrRiptideEditor(tk.Tk):
         xbar.grid(row=1, column=0, sticky="ew")
         self.map_canvas.bind("<Button-1>", self._on_map_click)
         self.map_canvas.bind("<B1-Motion>", self._on_map_drag)
+        self.map_canvas.bind("<B3-Motion>", self._on_map_right_drag)
         self.map_canvas.bind("<ButtonRelease-1>", self._on_map_release)
+        self.map_canvas.bind("<ButtonRelease-3>", self._on_map_release)
         self.map_canvas.bind("<Button-3>", self._on_map_right_click)
         self.map_canvas.bind("<Motion>", self._on_map_motion)
         self.map_canvas.bind("<Leave>", self._clear_preview)
@@ -178,6 +189,7 @@ class DrRiptideEditor(tk.Tk):
         self.tile_canvas.grid(row=0, column=0, sticky="nsew")
         tile_ybar.grid(row=0, column=1, sticky="ns")
         self.tile_canvas.bind("<Button-1>", self._on_tile_atlas_click)
+        self.tile_canvas.bind("<Configure>", self._on_atlas_canvas_configure)
 
         shootable_tab = ttk.Frame(side)
         shootable_tab.columnconfigure(0, weight=1)
@@ -189,6 +201,7 @@ class DrRiptideEditor(tk.Tk):
         self.shootable_canvas.grid(row=0, column=0, sticky="nsew")
         shootable_ybar.grid(row=0, column=1, sticky="ns")
         self.shootable_canvas.bind("<Button-1>", self._on_shootable_atlas_click)
+        self.shootable_canvas.bind("<Configure>", self._on_atlas_canvas_configure)
 
         entity_tab = ttk.Frame(side)
         entity_tab.columnconfigure(0, weight=1)
@@ -200,6 +213,7 @@ class DrRiptideEditor(tk.Tk):
         self.entity_canvas.grid(row=0, column=0, sticky="nsew")
         entity_ybar.grid(row=0, column=1, sticky="ns")
         self.entity_canvas.bind("<Button-1>", self._on_entity_atlas_click)
+        self.entity_canvas.bind("<Configure>", self._on_atlas_canvas_configure)
 
         layers = ttk.Frame(side, padding=6)
         side.add(layers, text="Layers")
@@ -327,6 +341,7 @@ class DrRiptideEditor(tk.Tk):
         taybar = ttk.Scrollbar(tile_tab, orient="vertical", command=self.asset_tile_canvas.yview)
         self.asset_tile_canvas.configure(xscrollcommand=taxbar.set, yscrollcommand=taybar.set)
         self.asset_tile_canvas.grid(row=0, column=0, sticky="nsew")
+        self.asset_tile_canvas.bind("<Configure>", self._on_atlas_canvas_configure)
         taybar.grid(row=0, column=1, sticky="ns")
         taxbar.grid(row=1, column=0, sticky="ew")
 
@@ -665,9 +680,32 @@ class DrRiptideEditor(tk.Tk):
         rmap = self.current_map
         if not rmap or not hasattr(self, "tile_canvas"):
             return
+        img = self._build_tile_atlas_image(self.tile_canvas)
+        self.tile_atlas_photo = ImageTk.PhotoImage(img)
+        self.tile_canvas.delete("all")
+        self.tile_canvas.create_image(0, 0, image=self.tile_atlas_photo, anchor="nw")
+        self.tile_canvas.config(scrollregion=(0, 0, img.width, img.height))
+        if hasattr(self, "asset_tile_canvas"):
+            asset_img = self._build_tile_atlas_image(self.asset_tile_canvas)
+            self.asset_tile_atlas_photo = ImageTk.PhotoImage(asset_img)
+            self.asset_tile_canvas.delete("all")
+            self.asset_tile_canvas.create_image(0, 0, image=self.asset_tile_atlas_photo, anchor="nw")
+            self.asset_tile_canvas.config(scrollregion=(0, 0, asset_img.width, asset_img.height))
+
+    def _canvas_content_width(self, canvas: tk.Canvas, fallback: int) -> int:
+        width = canvas.winfo_width()
+        return width if width > 1 else fallback
+
+    def _atlas_cols_for_width(self, canvas: tk.Canvas, item_w: int) -> int:
+        return max(1, self._canvas_content_width(canvas, item_w) // item_w)
+
+    def _build_tile_atlas_image(self, canvas: tk.Canvas) -> Image.Image:
+        rmap = self.current_map
+        if not rmap:
+            return Image.new("RGBA", (1, 1), (40, 40, 40, 255))
         scale = 4
-        cols = 32
         tile = 8 * scale
+        cols = self._atlas_cols_for_width(canvas, tile)
         rows = (512 + cols - 1) // cols
         label_h = 16
         img = Image.new("RGBA", (cols * tile, rows * (tile + label_h) + 32), (40, 40, 40, 255))
@@ -682,19 +720,22 @@ class DrRiptideEditor(tk.Tk):
             draw.text((px + 1, py + tile), str(tile_id), fill=fill)
             if tile_id == self.selected_tile_var.get():
                 draw.rectangle([px, py, px + tile - 1, py + tile - 1], outline=(255, 255, 0, 255), width=3)
-        self.tile_atlas_photo = ImageTk.PhotoImage(img)
-        self.tile_canvas.delete("all")
-        self.tile_canvas.create_image(0, 0, image=self.tile_atlas_photo, anchor="nw")
-        self.tile_canvas.config(scrollregion=(0, 0, img.width, img.height))
-        if hasattr(self, "asset_tile_canvas"):
-            self.asset_tile_canvas.delete("all")
-            self.asset_tile_canvas.create_image(0, 0, image=self.tile_atlas_photo, anchor="nw")
-            self.asset_tile_canvas.config(scrollregion=(0, 0, img.width, img.height))
+        return img
 
     def refresh_object_atlases(self) -> None:
         self._atlas_refs.clear()
         self._draw_object_atlas("shootable")
         self._draw_object_atlas("entity")
+
+    def _on_atlas_canvas_configure(self, _event=None) -> None:
+        if not self.current_map or self._atlas_resize_after_id is not None:
+            return
+        self._atlas_resize_after_id = self.after(80, self._refresh_atlases_after_resize)
+
+    def _refresh_atlases_after_resize(self) -> None:
+        self._atlas_resize_after_id = None
+        self.refresh_tile_atlas()
+        self.refresh_object_atlases()
 
     def _object_ids_for_atlas(self, kind: str) -> list[int]:
         ids = {o.object_id for o in self.occurrences if o.kind == kind}
@@ -711,12 +752,13 @@ class DrRiptideEditor(tk.Tk):
         rmap = self.current_map
         if not rmap:
             return
-        cols = 3
         card_w = 122
         card_h = 104
         pad = 8
+        cols = self._atlas_cols_for_width(canvas, card_w)
         selected_id = self.selected_shootable_var.get() if kind == "shootable" else self.selected_entity_var.get()
-        for idx, object_id in enumerate(self._object_ids_for_atlas(kind)):
+        object_ids = self._object_ids_for_atlas(kind)
+        for idx, object_id in enumerate(object_ids):
             col = idx % cols
             row = idx // cols
             x = pad + col * card_w
@@ -740,11 +782,13 @@ class DrRiptideEditor(tk.Tk):
                 canvas.create_rectangle(x + 18, y + 14, x + 66, y + 54, fill="#39414d", outline="#77808d", tags=(tag,))
                 canvas.create_text(x + 42, y + 34, text=f"{prefix}{object_id}", fill="white", tags=(tag,))
             name = rec.name or f"{kind.title()} {object_id}"
-            short_name = name if len(name) <= 18 else name[:17] + "..."
+            drop = shootable_drop_name(object_id) if kind == "shootable" else ""
+            display_name = f"Drop: {drop}" if drop else name
+            short_name = display_name if len(display_name) <= 18 else display_name[:17] + "..."
             prefix = "S" if kind == "shootable" else "E"
             canvas.create_text(x + 8, y + 64, text=f"{prefix}{object_id}", fill="#f7d04a", anchor="nw", tags=(tag,))
             canvas.create_text(x + 8, y + 82, text=short_name, fill="#e6edf3", anchor="nw", tags=(tag,))
-        rows = (len(self._object_ids_for_atlas(kind)) + cols - 1) // cols
+        rows = (len(object_ids) + cols - 1) // cols
         canvas.config(scrollregion=(0, 0, cols * card_w + pad, max(1, rows) * card_h + pad))
 
     def refresh_triggers(self) -> None:
@@ -785,12 +829,12 @@ class DrRiptideEditor(tk.Tk):
             ids = sorted({getattr(cell, f"{kind}_id") for cell in self.current_map.cells if getattr(cell, f"{kind}_id")})
             for object_id in ids:
                 rec = self.object_db.get(kind, object_id)
-                self.quick_object_tree.insert("", "end", iid=f"quick:{kind}:{object_id}", values=(kind, object_id, rec.name))
+                self.quick_object_tree.insert("", "end", iid=f"quick:{kind}:{object_id}", values=(kind, object_id, object_display_name(kind, object_id, rec.name)))
                 seen.add((kind, object_id))
         for sid in sorted(DOOR_SWITCH_TO_ENTITY):
             if ("shootable", sid) not in seen:
                 rec = self.object_db.get("shootable", sid)
-                self.quick_object_tree.insert("", "end", iid=f"quick:shootable:{sid}", values=("shootable", sid, rec.name))
+                self.quick_object_tree.insert("", "end", iid=f"quick:shootable:{sid}", values=("shootable", sid, object_display_name("shootable", sid, rec.name)))
 
     def refresh_object_browser(self) -> None:
         for item in self.object_tree.get_children():
@@ -804,7 +848,7 @@ class DrRiptideEditor(tk.Tk):
         for (kind, object_id), count in sorted(counts.items(), key=lambda kv: (kv[0][0], kv[0][1])):
             sample = next((o for o in self.occurrences if o.kind == kind and o.object_id == object_id), None)
             rec = self.object_db.get(kind, object_id, value=sample.value if sample else 0)
-            self.object_tree.insert("", "end", iid=f"{kind}:{object_id}", values=(kind, object_id, count, rec.category, rec.sprite, rec.name))
+            self.object_tree.insert("", "end", iid=f"{kind}:{object_id}", values=(kind, object_id, count, rec.category, rec.sprite, object_display_name(kind, object_id, rec.name)))
 
     def refresh_archive_browser(self) -> None:
         for item in self.archive_tree.get_children():
@@ -867,7 +911,7 @@ class DrRiptideEditor(tk.Tk):
         for kind, counter in [("entity", stats["entity_counts"]), ("shootable", stats["shootable_counts"])]:
             for object_id, count in sorted(counter.items()):
                 rec = self.object_db.get(kind, object_id)
-                self.logic_tree.insert(obj_parent, "end", iid=f"logic:counts:{kind}:{object_id}", text=f"{kind[0].upper()}{object_id}", values=(rec.category, f"{count}× {rec.name}"))
+                self.logic_tree.insert(obj_parent, "end", iid=f"logic:counts:{kind}:{object_id}", text=f"{kind[0].upper()}{object_id}", values=(rec.category, f"{count}x {object_display_name(kind, object_id, rec.name)}"))
 
         for sev, detail in self._validate_level(rmap, stats):
             self.problem_tree.insert("", "end", values=(sev, detail))
@@ -966,6 +1010,12 @@ class DrRiptideEditor(tk.Tk):
         self._drag_seen.clear()
 
     def _on_map_right_click(self, event) -> None:
+        self._drag_seen.clear()
+        cell_xy = self._canvas_to_cell(event)
+        if cell_xy:
+            self._erase_cell_layer(*cell_xy)
+
+    def _on_map_right_drag(self, event) -> None:
         cell_xy = self._canvas_to_cell(event)
         if cell_xy:
             self._erase_cell_layer(*cell_xy)
@@ -992,7 +1042,7 @@ class DrRiptideEditor(tk.Tk):
             self._drag_seen.add(key)
             if layer == "tile":
                 rmap.set_cell(x, y, tile_id=self.selected_tile_var.get())
-                self._mark_level_changed(tile_changed=True)
+                self._mark_level_changed(tile_changed=True, tile_cell=(x, y))
             elif layer == "entity":
                 rmap.set_cell(x, y, entity_id=self.selected_entity_var.get())
                 self._mark_level_changed()
@@ -1017,9 +1067,13 @@ class DrRiptideEditor(tk.Tk):
         if not rmap:
             return
         layer = self.active_layer_var.get()
+        key = ("erase", layer, x, y)
+        if key in self._drag_seen:
+            return
+        self._drag_seen.add(key)
         if layer == "tile":
-            rmap.set_cell(x, y, tile_id=0)
-            self._mark_level_changed(tile_changed=True)
+            rmap.set_cell(x, y, tile_id=ERASE_TILE_ID)
+            self._mark_level_changed(tile_changed=True, tile_cell=(x, y))
         elif layer == "entity":
             rmap.set_cell(x, y, entity_id=0)
             self._mark_level_changed()
@@ -1029,13 +1083,28 @@ class DrRiptideEditor(tk.Tk):
         self.select_cell(x, y)
         self._update_brush_status()
 
-    def _mark_level_changed(self, *, tile_changed: bool = False) -> None:
+    def _mark_level_changed(self, *, tile_changed: bool = False, tile_cell: tuple[int, int] | None = None) -> None:
         self.dirty = True
         if tile_changed:
-            self.map_base_image = None
-            self.map_base_key = None
+            if tile_cell is None:
+                self.map_base_image = None
+                self.map_base_key = None
+            else:
+                self._update_base_tile(*tile_cell)
         self._schedule_map_refresh()
-        self._schedule_metadata_refresh()
+        if not tile_changed:
+            self._schedule_metadata_refresh()
+
+    def _update_base_tile(self, x: int, y: int) -> None:
+        rmap = self.current_map
+        if not rmap or self.map_base_image is None:
+            return
+        scale = max(1, int(self.scale_var.get()))
+        if self.map_base_key != (id(rmap), scale):
+            return
+        tile = 8 * scale
+        tile_img = rmap.tile_image(rmap.cell(x, y).tile_id, scale=scale).convert("RGBA")
+        self.map_base_image.paste(tile_img, (x * tile, y * tile))
 
     def _mark_specials_changed(self) -> None:
         self.dirty = True
@@ -1092,6 +1161,9 @@ class DrRiptideEditor(tk.Tk):
         ]
         if cell.shootable_id in SHOOTABLE_INFO:
             lines.append(f"Shootable info: {SHOOTABLE_INFO[cell.shootable_id]}")
+        drop = shootable_drop_name(cell.shootable_id)
+        if drop:
+            lines.append(f"Shootable drop: {drop}")
         if cell.entity_id in ENTITY_INFO:
             lines.append(f"Entity info: {ENTITY_INFO[cell.entity_id]}")
         if trigger_hits:
@@ -1136,8 +1208,8 @@ class DrRiptideEditor(tk.Tk):
 
     def _on_tile_atlas_click(self, event) -> None:
         scale = 4
-        cols = 32
         tile = 8 * scale
+        cols = self._atlas_cols_for_width(self.tile_canvas, tile)
         label_h = 16
         y_canvas = int(self.tile_canvas.canvasy(event.y)) - 24
         if y_canvas < 0:
@@ -1185,7 +1257,7 @@ class DrRiptideEditor(tk.Tk):
         self._update_brush_status()
         rec = self.object_db.get(kind, object_id)
         prefix = "S" if kind == "shootable" else "E"
-        self.status_var.set(f"Brush: {prefix}{object_id} {rec.name}")
+        self.status_var.set(f"Brush: {prefix}{object_id} {object_display_name(kind, object_id, rec.name)}")
 
     def _on_editor_side_tab_changed(self, _event) -> None:
         if not hasattr(self, "editor_side_notebook"):
@@ -1309,8 +1381,10 @@ class DrRiptideEditor(tk.Tk):
         self.highlight = (kind, object_id)
         sample = next((o for o in self.occurrences if o.kind == kind and o.object_id == object_id), None)
         rec = self.object_db.get(kind, object_id, value=sample.value if sample else 0)
+        drop = shootable_drop_name(object_id) if kind == "shootable" else ""
+        drop_line = f"Drop: {drop}\n" if drop else ""
         self.object_detail.delete("1.0", tk.END)
-        self.object_detail.insert(tk.END, f"{kind} {object_id}\nName: {rec.name}\nCategory: {rec.category}\nSprite: {rec.sprite or '-'}\nInfo: {rec.info or '-'}\nNotes: {rec.notes or '-'}\nConfidence: {rec.confidence}\n")
+        self.object_detail.insert(tk.END, f"{kind} {object_id}\nName: {rec.name}\n{drop_line}Category: {rec.category}\nSprite: {rec.sprite or '-'}\nInfo: {rec.info or '-'}\nNotes: {rec.notes or '-'}\nConfidence: {rec.confidence}\n")
         for item in self.occ_tree.get_children():
             self.occ_tree.delete(item)
         occs = [o for o in self.occurrences if o.kind == kind and o.object_id == object_id]

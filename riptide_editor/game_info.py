@@ -73,6 +73,20 @@ SHOOTABLE_INFO = {
     64: "opens door 1", 128: "opens door 2", 192: "opens door 3",
 }
 
+SHOOTABLE_DROPS = {
+    1: "extra air",
+    2: "extra shield",
+    3: "extra fire power",
+    4: "PU_TOP item (unknown effect)",
+    5: "extra 1-up",
+    6: "green key",
+    7: "auto-fire",
+    8: "Jason sub",
+    9: "Jason sub",
+    16: "coin",
+    32: "POD1/POD2 by cell parity",
+}
+
 MESSAGES = {
     0: "You need a key for this door.",
     1: "You got the key!",
@@ -132,3 +146,7 @@ def entity_sprite_name(entity_id: int, even_pos: bool) -> str:
 
 def shootable_sprite_name(shootable_id: int, even_pos: bool) -> str:
     return _choose_even_odd(SHOOTABLE_SPRITES.get(shootable_id, ""), even_pos)
+
+
+def shootable_drop_name(shootable_id: int) -> str:
+    return SHOOTABLE_DROPS.get(shootable_id, "")

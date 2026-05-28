@@ -22,6 +22,16 @@
     },
     {
       "kind": "entity",
+      "object_id": 3,
+      "name": "Door 3",
+      "category": "door",
+      "sprite": "DOOR.L",
+      "info": "door 3",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
       "object_id": 4,
       "name": "Coin",
       "category": "pickup",
@@ -152,6 +162,16 @@
     },
     {
       "kind": "entity",
+      "object_id": 56,
+      "name": "Face shooter",
+      "category": "enemy-or-active",
+      "sprite": "FACE_R.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
       "object_id": 60,
       "name": "Sea serpent",
       "category": "enemy-or-active",
@@ -221,6 +241,86 @@
       "confidence": "hardcoded-or-observed"
     },
     {
+      "kind": "entity",
+      "object_id": 88,
+      "name": "Up spikes",
+      "category": "hazard",
+      "sprite": "SPIKES_U.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 92,
+      "name": "Statue",
+      "category": "level-object",
+      "sprite": "STATUE.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 96,
+      "name": "Fire pit",
+      "category": "hazard",
+      "sprite": "FIRE_PIT.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 100,
+      "name": "Rocket shutter",
+      "category": "enemy-or-active",
+      "sprite": "SHUTL_L.L",
+      "info": "shooting rockets",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 104,
+      "name": "Clam",
+      "category": "enemy-or-active",
+      "sprite": "CLAM.L",
+      "info": "spawning a gem",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 108,
+      "name": "Cannon",
+      "category": "enemy-or-active",
+      "sprite": "CANNONL.L",
+      "info": "always looking to player side",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 112,
+      "name": "Face shooter",
+      "category": "enemy-or-active",
+      "sprite": "FACE_L.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 116,
+      "name": "Bomb ship",
+      "category": "enemy-or-active",
+      "sprite": "SHIPL.L",
+      "info": "dropping bombs (SHPBMB.L)",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
       "kind": "shootable",
       "object_id": 1,
       "name": "Pickup barrel 1",
@@ -247,6 +347,16 @@
       "category": "container",
       "sprite": "BARREL2.L",
       "info": "spawning extra fire power item",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 4,
+      "name": "Pickup barrel 4",
+      "category": "container",
+      "sprite": "BARREL2.L",
+      "info": "spawning PU_TOP item (unknown effect)",
       "notes": "",
       "confidence": "hardcoded-or-observed"
     },
@@ -292,6 +402,16 @@
     },
     {
       "kind": "shootable",
+      "object_id": 9,
+      "name": "Pickup barrel 9",
+      "category": "container",
+      "sprite": "BARREL2.L",
+      "info": "spawning Jason sub",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
       "object_id": 16,
       "name": "Coin barrel",
       "category": "container",
@@ -327,6 +447,16 @@
       "category": "switch",
       "sprite": "SWITCH.L",
       "info": "opens door 2",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 192,
+      "name": "Door switch 192",
+      "category": "switch",
+      "sprite": "SWITCH.L",
+      "info": "opens door 3",
       "notes": "",
       "confidence": "hardcoded-or-observed"
     },
