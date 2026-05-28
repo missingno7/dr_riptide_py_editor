@@ -1,0 +1,584 @@
+{
+  "records": [
+    {
+      "kind": "entity",
+      "object_id": 1,
+      "name": "Door 1",
+      "category": "door",
+      "sprite": "DOOR.L",
+      "info": "door 1",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 2,
+      "name": "Door 2",
+      "category": "door",
+      "sprite": "DOOR.L",
+      "info": "door 2",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 4,
+      "name": "Coin",
+      "category": "pickup",
+      "sprite": "COIN.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 8,
+      "name": "Mine",
+      "category": "hazard",
+      "sprite": "MINE.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 12,
+      "name": "Vertical zap/hazard",
+      "category": "hazard",
+      "sprite": "ZAP_UD.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 16,
+      "name": "Pod pair",
+      "category": "unknown",
+      "sprite": "POD1.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 20,
+      "name": "Fish",
+      "category": "enemy-or-active",
+      "sprite": "FISH1R.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 24,
+      "name": "Seaweed",
+      "category": "level-object",
+      "sprite": "WEED1.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 28,
+      "name": "Spitting tulip",
+      "category": "enemy-or-active",
+      "sprite": "TULIPL.L",
+      "info": "spitting tulip",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 32,
+      "name": "Chest",
+      "category": "unknown",
+      "sprite": "CHEST.L",
+      "info": "chest spawning many coins",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 36,
+      "name": "Pirana",
+      "category": "enemy-or-active",
+      "sprite": "PIRANAL.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 40,
+      "name": "Gem",
+      "category": "pickup",
+      "sprite": "GEM.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 44,
+      "name": "Water duct / current",
+      "category": "current",
+      "sprite": "DUCT_R.L",
+      "info": "pushing player subs right/left",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 48,
+      "name": "Water duct / current",
+      "category": "current",
+      "sprite": "DUCT_D.L",
+      "info": "pushing player subs up/down",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 52,
+      "name": "Block",
+      "category": "level-object",
+      "sprite": "BLOCK.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 60,
+      "name": "Sea serpent",
+      "category": "enemy-or-active",
+      "sprite": "SERP_R.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 64,
+      "name": "Crab",
+      "category": "enemy-or-active",
+      "sprite": "CRAB.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 68,
+      "name": "Pulse cannon piece",
+      "category": "pickup",
+      "sprite": "PIECE_1.L",
+      "info": "piece of pulse cannon",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 72,
+      "name": "Jellyfish",
+      "category": "enemy-or-active",
+      "sprite": "JELLY.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 76,
+      "name": "Shark",
+      "category": "enemy-or-active",
+      "sprite": "SHARKL.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 80,
+      "name": "Bonus",
+      "category": "pickup",
+      "sprite": "BONUS1.L",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "entity",
+      "object_id": 84,
+      "name": "Tentacle hole",
+      "category": "enemy-or-active",
+      "sprite": "TENT_IN.L",
+      "info": "tentacle in hole",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 1,
+      "name": "Pickup barrel 1",
+      "category": "container",
+      "sprite": "BARREL2.L",
+      "info": "spawning extra air",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 2,
+      "name": "Pickup barrel 2",
+      "category": "container",
+      "sprite": "BARREL2.L",
+      "info": "spawning extra shield",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 3,
+      "name": "Pickup barrel 3",
+      "category": "container",
+      "sprite": "BARREL2.L",
+      "info": "spawning extra fire power item",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 5,
+      "name": "Pickup barrel 5",
+      "category": "container",
+      "sprite": "BARREL2.L",
+      "info": "spawning extra 1-up item",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 6,
+      "name": "Pickup barrel 6",
+      "category": "container",
+      "sprite": "BARREL2.L",
+      "info": "spawning green key",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 7,
+      "name": "Pickup barrel 7",
+      "category": "container",
+      "sprite": "BARREL2.L",
+      "info": "spawning auto-fire",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 8,
+      "name": "Pickup barrel 8",
+      "category": "container",
+      "sprite": "BARREL2.L",
+      "info": "spawning Jason sub",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 16,
+      "name": "Coin barrel",
+      "category": "container",
+      "sprite": "BARREL3.L",
+      "info": "spawning a coin",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 32,
+      "name": "Pod barrel",
+      "category": "container",
+      "sprite": "BARREL1.L",
+      "info": "spawning POD1/POD2 depending on parity",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 64,
+      "name": "Door switch 64",
+      "category": "switch",
+      "sprite": "SWITCH.L",
+      "info": "opens door 1",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "shootable",
+      "object_id": 128,
+      "name": "Door switch 128",
+      "category": "switch",
+      "sprite": "SWITCH.L",
+      "info": "opens door 2",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 0,
+      "name": "player spawn",
+      "category": "spawn",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 1,
+      "name": "level exit",
+      "category": "exit",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 2,
+      "name": "message: \"You need a key for this door.\"",
+      "category": "message-position",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 3,
+      "name": "key gate",
+      "category": "key-gate",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 4,
+      "name": "level exit left",
+      "category": "exit",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 10,
+      "name": "teleport 1 IN",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 11,
+      "name": "teleport 1 OUT",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 12,
+      "name": "teleport 2 IN",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 13,
+      "name": "teleport 2 OUT",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 14,
+      "name": "teleport 3 IN",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 15,
+      "name": "teleport 3 OUT",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 16,
+      "name": "teleport 4 IN",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 17,
+      "name": "teleport 4 OUT",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 18,
+      "name": "teleport 5 IN",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 19,
+      "name": "teleport 5 OUT",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 20,
+      "name": "teleport 6 IN",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 21,
+      "name": "teleport 6 OUT",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 22,
+      "name": "teleport 7 IN",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 23,
+      "name": "teleport 7 OUT",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 24,
+      "name": "teleport 8 IN",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 25,
+      "name": "teleport 8 OUT",
+      "category": "teleport",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 30,
+      "name": "message 1 position",
+      "category": "message-position",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 31,
+      "name": "message 1: Think!",
+      "category": "message-content",
+      "sprite": "",
+      "info": "Think!",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 32,
+      "name": "message 2 position",
+      "category": "message-position",
+      "sprite": "",
+      "info": "",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    },
+    {
+      "kind": "trigger",
+      "object_id": 33,
+      "name": "message 2: Watch out for those piranas!",
+      "category": "message-content",
+      "sprite": "",
+      "info": "Watch out for those piranas!",
+      "notes": "",
+      "confidence": "hardcoded-or-observed"
+    }
+  ]
+}
