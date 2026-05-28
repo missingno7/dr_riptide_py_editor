@@ -47,5 +47,17 @@ The goal is not to hide raw data. The goal is to make this a reverse-engineering
 
 - Sprite offsets are approximate. The overlay centers/rises sprites over map cells, but exact in-game origin offsets probably live in the executable.
 - Entity behavior is only named at the level already documented by DrRiptideDissected.
-- Editing triggers is intentionally still read-only; visualizing first avoids corrupting maps.
+- Special point editing is supported for named POINTS slots. Unknown trigger slots should stay research-only until their behavior is confirmed.
 - Full path/AI logic likely needs deeper EXE work if we want accurate behavior simulation.
+
+## DrRiptideDissected follow-up
+
+DrRiptideDissected confirms that the map logic is mostly hardcoded by numeric IDs and fixed POINTS slots, not a free-form event graph.
+
+- Shootable switches are fixed: `S64 -> E1`, `S128 -> E2`, `S192 -> E3`.
+- Teleports are fixed POINTS pairs: `10/11`, `12/13`, ..., `28/29`.
+- Message position/content pairs are fixed: `30/31`, `32/33`, `34/35`, `36/37`.
+- Message content slots are message IDs, not map positions, so the editor should not draw `31/33/35/37` as points on the map.
+- DrRiptideDissected's map view marks entities/shootables with overlays instead of drawing exact game sprites, so exact sprite origin offsets still need in-game/EXE confirmation.
+
+The editor now treats special points as editable named slots. Select a special point, arm placement, then click the map to write that slot's position.

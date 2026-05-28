@@ -193,6 +193,19 @@ class RiptideMap:
         pos = 4 + index * 4
         struct.pack_into("<HBB", self.raw, pos, cell.tile_id, cell.shootable_id, cell.entity_id)
 
+    def set_trigger(self, index: int, value: int) -> None:
+        if not 0 <= index < self.TRIGGER_COUNT:
+            raise IndexError(f"Trigger index out of bounds: {index}")
+        if not 0 <= value <= 0xFFFF:
+            raise ValueError("trigger value must be 0..65535")
+        self.triggers[index] = value
+        trigger_start = len(self.raw) - 104
+        struct.pack_into("<H", self.raw, trigger_start + index * 2, value)
+
+    def set_trigger_xy(self, index: int, x: int, y: int) -> None:
+        self.cell_index(x, y)
+        self.set_trigger(index, y * self.width + x)
+
     def tile_image(self, tile_id: int, scale: int = 1) -> Image.Image:
         if not 0 <= tile_id < self.TILE_COUNT:
             tile_id = 0

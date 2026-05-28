@@ -149,7 +149,10 @@ def scan_map(entry) -> list[ObjectOccurrence]:
                 out.append(ObjectOccurrence("shootable", cell.shootable_id, entry.filename, x, y, cell.shootable_id))
             if cell.entity_id:
                 out.append(ObjectOccurrence("entity", cell.entity_id, entry.filename, x, y, cell.entity_id))
+    message_content_slots = {31, 33, 35, 37}
     for index, value, x, y, _even in rmap.nonzero_triggers():
+        if index in message_content_slots:
+            continue
         out.append(ObjectOccurrence("trigger", index, entry.filename, x, y, value, trigger_name(index, value)))
     return out
 

@@ -15,6 +15,7 @@ from riptide_editor.game_info import (
     map_info,
     trigger_name,
     message_by_id,
+    MESSAGES,
     entity_sprite_name,
     shootable_sprite_name,
     ENTITY_INFO,
@@ -34,6 +35,10 @@ DEFAULT_DAT = DEFAULT_GAME_DATA / "RIPTIDE.DAT"
 OBJECT_DB_PATH = PROJECT_DIR / "object_db.json"
 
 DOOR_SWITCH_TO_ENTITY = {64: 1, 128: 2, 192: 3}
+SPECIAL_TRIGGER_SLOTS = list(range(0, 10)) + list(range(10, 38))
+MESSAGE_POSITION_TO_CONTENT = {30: 31, 32: 33, 34: 35, 36: 37}
+MESSAGE_CONTENT_TO_POSITION = {v: k for k, v in MESSAGE_POSITION_TO_CONTENT.items()}
+MESSAGE_CONTENT_SLOTS = set(MESSAGE_CONTENT_TO_POSITION)
 
 
 class DrRiptideEditor(tk.Tk):
@@ -50,9 +55,13 @@ class DrRiptideEditor(tk.Tk):
         self.occurrences = []
         self.highlight: tuple[str, int] | None = None
         self.selected_trigger_index: int | None = None
+        self.pending_trigger_index: int | None = None
 
         self.scale_var = tk.IntVar(value=3)
-        self.tool_var = tk.StringVar(value="inspect")
+        self.tool_var = tk.StringVar(value="select")
+        self.active_layer_var = tk.StringVar(value="tile")
+        self.special_status_var = tk.StringVar(value="Select a special point")
+        self.message_id_var = tk.StringVar(value="0: You need a key for this door.")
         self.selected_tile_var = tk.IntVar(value=0)
         self.selected_entity_var = tk.IntVar(value=0)
         self.selected_shootable_var = tk.IntVar(value=0)
@@ -71,8 +80,17 @@ class DrRiptideEditor(tk.Tk):
         self.map_photo: ImageTk.PhotoImage | None = None
         self.tile_atlas_photo: ImageTk.PhotoImage | None = None
         self.rendered_map: Image.Image | None = None
+        self.map_base_image: Image.Image | None = None
+        self.map_base_key: tuple[int, int] | None = None
         self.sprite_cache: dict[tuple[str, int], Image.Image] = {}
         self._sprite_sheet_refs: list[ImageTk.PhotoImage] = []
+        self._atlas_refs: list[ImageTk.PhotoImage] = []
+        self._preview_photo: ImageTk.PhotoImage | None = None
+        self._preview_items: list[int] = []
+        self._drag_seen: set[tuple[str, int, int]] = set()
+        self._refresh_after_id: str | None = None
+        self._metadata_after_id: str | None = None
+        self.map_entries = []
 
         self._build_ui()
         self._load_default_dat()
@@ -88,53 +106,28 @@ class DrRiptideEditor(tk.Tk):
         top.grid(row=0, column=0, sticky="ew")
         ttk.Button(top, text="Open game_data / RIPTIDE.DAT", command=self.open_dat).pack(side="left")
         ttk.Button(top, text="Save", command=self.save_dat).pack(side="left", padx=(6, 0))
-        ttk.Button(top, text="Validate level", command=self.validate_current_level).pack(side="left", padx=(6, 0))
-        ttk.Button(top, text="Export PNG", command=self.export_png).pack(side="left", padx=(6, 16))
-        ttk.Label(top, text="Mode:").pack(side="left")
+        ttk.Button(top, text="Export PNG", command=self.export_png).pack(side="left", padx=(6, 14))
+        ttk.Label(top, text="Level").pack(side="left")
+        self.map_combo = ttk.Combobox(top, state="readonly", width=34)
+        self.map_combo.pack(side="left", padx=(4, 14))
+        self.map_combo.bind("<<ComboboxSelected>>", self._on_map_select)
+        ttk.Label(top, text="Mode").pack(side="left")
         for text, value in [
-            ("Inspect", "inspect"), ("Tiles", "paint_tile"), ("Entities", "paint_entity"),
-            ("Shootables", "paint_shootable"), ("Eyedropper", "pick"), ("Raw", "raw"),
+            ("Select", "select"), ("Move", "move"), ("Brush", "brush"), ("Pick", "pick"),
         ]:
             ttk.Radiobutton(top, text=text, variable=self.tool_var, value=value).pack(side="left", padx=(4, 0))
-        ttk.Label(top, text="Zoom").pack(side="left", padx=(18, 4))
+        ttk.Label(top, text="Layer").pack(side="left", padx=(18, 4))
+        ttk.Label(top, textvariable=self.active_layer_var, width=10).pack(side="left")
+        ttk.Label(top, text="Zoom").pack(side="left", padx=(10, 4))
         ttk.Spinbox(top, from_=1, to=8, textvariable=self.scale_var, width=4, command=self.refresh_map).pack(side="left")
 
-        paned = ttk.PanedWindow(self, orient="horizontal")
-        paned.grid(row=1, column=0, sticky="nsew")
-
-        left = ttk.Frame(paned, padding=6)
-        left.rowconfigure(1, weight=1)
-        left.columnconfigure(0, weight=1)
-        paned.add(left, weight=0)
-
-        ttk.Label(left, text="Levels", font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="w")
-        self.map_list = tk.Listbox(left, width=30, exportselection=False)
-        self.map_list.grid(row=1, column=0, sticky="nsew", pady=(4, 8))
-        self.map_list.bind("<<ListboxSelect>>", self._on_map_select)
-        self.map_info_label = ttk.Label(left, text="No map loaded", justify="left", wraplength=260)
-        self.map_info_label.grid(row=2, column=0, sticky="ew")
-
-        layer_box = ttk.LabelFrame(left, text="Layers", padding=6)
-        layer_box.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-        for text, var in [
-            ("Game-like object sprites", self.show_sprite_overlay_var),
-            ("Object labels E/S", self.show_entities_var),
-            ("Special / trigger markers", self.show_triggers_var),
-            ("Teleport + message links", self.show_event_links_var),
-            ("Switch → door links", self.show_door_links_var),
-            ("Solid mask", self.show_solids_var),
-            ("Grid", self.show_grid_var),
-            ("Only highlighted object", self.show_highlight_only_var),
-        ]:
-            ttk.Checkbutton(layer_box, text=text, variable=var, command=self.refresh_map).pack(anchor="w")
-        ttk.Button(layer_box, text="Clear highlight", command=self.clear_highlight).pack(fill="x", pady=(8, 0))
-
-        main = ttk.Notebook(paned)
-        paned.add(main, weight=1)
+        main = ttk.Notebook(self)
+        main.grid(row=1, column=0, sticky="nsew")
         self.workspace = main
 
+        self.map_info_label = ttk.Label(self, text="No map loaded")
+
         self._build_build_workspace(main)
-        self._build_logic_workspace(main)
         self._build_assets_workspace(main)
         self._build_research_workspace(main)
 
@@ -147,7 +140,7 @@ class DrRiptideEditor(tk.Tk):
         tab = ttk.Frame(notebook, padding=6)
         tab.columnconfigure(0, weight=1)
         tab.rowconfigure(0, weight=1)
-        notebook.add(tab, text="BUILD")
+        notebook.add(tab, text="LEVEL EDITOR")
 
         split = ttk.PanedWindow(tab, orient="horizontal")
         split.grid(row=0, column=0, sticky="nsew")
@@ -165,9 +158,56 @@ class DrRiptideEditor(tk.Tk):
         xbar.grid(row=1, column=0, sticky="ew")
         self.map_canvas.bind("<Button-1>", self._on_map_click)
         self.map_canvas.bind("<B1-Motion>", self._on_map_drag)
+        self.map_canvas.bind("<ButtonRelease-1>", self._on_map_release)
+        self.map_canvas.bind("<Button-3>", self._on_map_right_click)
+        self.map_canvas.bind("<Motion>", self._on_map_motion)
+        self.map_canvas.bind("<Leave>", self._clear_preview)
 
         side = ttk.Notebook(split)
         split.add(side, weight=0)
+        self.editor_side_notebook = side
+        side.bind("<<NotebookTabChanged>>", self._on_editor_side_tab_changed)
+
+        tile_tab = ttk.Frame(side)
+        tile_tab.columnconfigure(0, weight=1)
+        tile_tab.rowconfigure(0, weight=1)
+        side.add(tile_tab, text="Tiles")
+        self.tile_canvas = tk.Canvas(tile_tab, background="#282828", width=390)
+        tile_ybar = ttk.Scrollbar(tile_tab, orient="vertical", command=self.tile_canvas.yview)
+        self.tile_canvas.configure(yscrollcommand=tile_ybar.set)
+        self.tile_canvas.grid(row=0, column=0, sticky="nsew")
+        tile_ybar.grid(row=0, column=1, sticky="ns")
+        self.tile_canvas.bind("<Button-1>", self._on_tile_atlas_click)
+
+        shootable_tab = ttk.Frame(side)
+        shootable_tab.columnconfigure(0, weight=1)
+        shootable_tab.rowconfigure(0, weight=1)
+        side.add(shootable_tab, text="Shootables")
+        self.shootable_canvas = tk.Canvas(shootable_tab, background="#282828", width=390)
+        shootable_ybar = ttk.Scrollbar(shootable_tab, orient="vertical", command=self.shootable_canvas.yview)
+        self.shootable_canvas.configure(yscrollcommand=shootable_ybar.set)
+        self.shootable_canvas.grid(row=0, column=0, sticky="nsew")
+        shootable_ybar.grid(row=0, column=1, sticky="ns")
+        self.shootable_canvas.bind("<Button-1>", self._on_shootable_atlas_click)
+
+        entity_tab = ttk.Frame(side)
+        entity_tab.columnconfigure(0, weight=1)
+        entity_tab.rowconfigure(0, weight=1)
+        side.add(entity_tab, text="Entities")
+        self.entity_canvas = tk.Canvas(entity_tab, background="#282828", width=390)
+        entity_ybar = ttk.Scrollbar(entity_tab, orient="vertical", command=self.entity_canvas.yview)
+        self.entity_canvas.configure(yscrollcommand=entity_ybar.set)
+        self.entity_canvas.grid(row=0, column=0, sticky="nsew")
+        entity_ybar.grid(row=0, column=1, sticky="ns")
+        self.entity_canvas.bind("<Button-1>", self._on_entity_atlas_click)
+
+        layers = ttk.Frame(side, padding=6)
+        side.add(layers, text="Layers")
+        self._build_layers_panel(layers)
+
+        logic = ttk.Frame(side, padding=6)
+        side.add(logic, text="Logic")
+        self._build_logic_panel(logic)
 
         inspect = ttk.Frame(side, padding=6)
         side.add(inspect, text="Inspect")
@@ -206,38 +246,69 @@ class DrRiptideEditor(tk.Tk):
             self.trigger_tree.column(col, width=width, stretch=(col == "type"))
         self.trigger_tree.pack(fill="both", expand=True)
         self.trigger_tree.bind("<<TreeviewSelect>>", self._on_trigger_select)
+        controls = ttk.Frame(specials)
+        controls.pack(fill="x", pady=(8, 0))
+        ttk.Button(controls, text="Place selected by map click", command=self._arm_selected_trigger_placement).pack(fill="x")
+        ttk.Button(controls, text="Move selected to selected cell", command=self._move_selected_trigger_to_cell).pack(fill="x", pady=(4, 0))
+        ttk.Button(controls, text="Clear selected special point", command=self._clear_selected_trigger).pack(fill="x", pady=(4, 0))
+        msg_frame = ttk.LabelFrame(specials, text="Message content", padding=6)
+        msg_frame.pack(fill="x", pady=(8, 0))
+        self.message_combo = ttk.Combobox(msg_frame, state="readonly", textvariable=self.message_id_var, values=self._message_combo_values())
+        self.message_combo.pack(fill="x")
+        self.message_combo.bind("<<ComboboxSelected>>", self._on_message_content_select)
+        ttk.Label(specials, textvariable=self.special_status_var, wraplength=360).pack(fill="x", pady=(8, 0))
 
-    def _build_logic_workspace(self, notebook: ttk.Notebook) -> None:
-        tab = ttk.Frame(notebook, padding=6)
-        tab.columnconfigure(0, weight=1)
-        tab.rowconfigure(1, weight=1)
-        notebook.add(tab, text="LOGIC")
-        self.logic_summary = tk.Text(tab, height=7, wrap="word")
+    def _build_layers_panel(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        checks = [
+            ("Sprite overlay", self.show_sprite_overlay_var),
+            ("Object labels", self.show_entities_var),
+            ("Special points", self.show_triggers_var),
+            ("Teleport + message links", self.show_event_links_var),
+            ("Switch to door links", self.show_door_links_var),
+            ("Solid mask", self.show_solids_var),
+            ("Grid", self.show_grid_var),
+            ("Only highlighted", self.show_highlight_only_var),
+        ]
+        for row, (text, var) in enumerate(checks):
+            ttk.Checkbutton(parent, text=text, variable=var, command=self.refresh_map).grid(row=row, column=0, sticky="w", pady=2)
+        ttk.Separator(parent).grid(row=len(checks), column=0, sticky="ew", pady=8)
+        ttk.Button(parent, text="Clear highlight", command=self.clear_highlight).grid(row=len(checks) + 1, column=0, sticky="ew")
+
+    def _build_logic_panel(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)
+        self.logic_summary = tk.Text(parent, height=6, wrap="word")
         self.logic_summary.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 
-        split = ttk.PanedWindow(tab, orient="horizontal")
+        split = ttk.PanedWindow(parent, orient="vertical")
         split.grid(row=1, column=0, sticky="nsew")
-        graph_frame = ttk.LabelFrame(split, text="Level logic graph", padding=6)
-        problem_frame = ttk.LabelFrame(split, text="Problems / warnings", padding=6)
+        graph_frame = ttk.LabelFrame(split, text="Level logic", padding=6)
+        problem_frame = ttk.LabelFrame(split, text="Warnings", padding=6)
         split.add(graph_frame, weight=2)
         split.add(problem_frame, weight=1)
 
-        self.logic_tree = ttk.Treeview(graph_frame, columns=("type", "detail"), show="tree headings")
-        self.logic_tree.heading("#0", text="Node")
+        self.logic_tree = ttk.Treeview(graph_frame, columns=("type", "detail"), show="tree headings", height=14)
+        self.logic_tree.heading("#0", text="Item")
         self.logic_tree.heading("type", text="Type")
         self.logic_tree.heading("detail", text="Detail")
-        self.logic_tree.column("#0", width=260)
-        self.logic_tree.column("type", width=130)
-        self.logic_tree.column("detail", width=420, stretch=True)
+        self.logic_tree.column("#0", width=170)
+        self.logic_tree.column("type", width=90)
+        self.logic_tree.column("detail", width=260, stretch=True)
         self.logic_tree.pack(fill="both", expand=True)
         self.logic_tree.bind("<<TreeviewSelect>>", self._on_logic_select)
 
-        self.problem_tree = ttk.Treeview(problem_frame, columns=("severity", "detail"), show="headings")
-        self.problem_tree.heading("severity", text="Severity")
+        self.problem_tree = ttk.Treeview(problem_frame, columns=("severity", "detail"), show="headings", height=7)
+        self.problem_tree.heading("severity", text="Level")
         self.problem_tree.heading("detail", text="Detail")
-        self.problem_tree.column("severity", width=85)
-        self.problem_tree.column("detail", width=400, stretch=True)
+        self.problem_tree.column("severity", width=70)
+        self.problem_tree.column("detail", width=320, stretch=True)
         self.problem_tree.pack(fill="both", expand=True)
+
+    def _build_logic_workspace(self, notebook: ttk.Notebook) -> None:
+        tab = ttk.Frame(notebook, padding=6)
+        notebook.add(tab, text="LOGIC")
+        self._build_logic_panel(tab)
 
     def _build_assets_workspace(self, notebook: ttk.Notebook) -> None:
         tab = ttk.Frame(notebook, padding=6)
@@ -251,14 +322,13 @@ class DrRiptideEditor(tk.Tk):
         tile_tab.columnconfigure(0, weight=1)
         tile_tab.rowconfigure(0, weight=1)
         nb.add(tile_tab, text="Map Tiles")
-        self.tile_canvas = tk.Canvas(tile_tab, background="#282828")
-        taxbar = ttk.Scrollbar(tile_tab, orient="horizontal", command=self.tile_canvas.xview)
-        taybar = ttk.Scrollbar(tile_tab, orient="vertical", command=self.tile_canvas.yview)
-        self.tile_canvas.configure(xscrollcommand=taxbar.set, yscrollcommand=taybar.set)
-        self.tile_canvas.grid(row=0, column=0, sticky="nsew")
+        self.asset_tile_canvas = tk.Canvas(tile_tab, background="#282828")
+        taxbar = ttk.Scrollbar(tile_tab, orient="horizontal", command=self.asset_tile_canvas.xview)
+        taybar = ttk.Scrollbar(tile_tab, orient="vertical", command=self.asset_tile_canvas.yview)
+        self.asset_tile_canvas.configure(xscrollcommand=taxbar.set, yscrollcommand=taybar.set)
+        self.asset_tile_canvas.grid(row=0, column=0, sticky="nsew")
         taybar.grid(row=0, column=1, sticky="ns")
         taxbar.grid(row=1, column=0, sticky="ew")
-        self.tile_canvas.bind("<Button-1>", self._on_tile_atlas_click)
 
         sprite_tab = ttk.Frame(nb)
         sprite_tab.columnconfigure(1, weight=1)
@@ -322,8 +392,11 @@ class DrRiptideEditor(tk.Tk):
         ttk.Label(row, text=label, width=13).pack(side="left")
         ttk.Spinbox(row, from_=start, to=end, textvariable=var, width=8).pack(side="left")
 
+    def _message_combo_values(self) -> list[str]:
+        return [f"{message_id}: {text}" for message_id, text in sorted(MESSAGES.items())]
+
     def _brush_status_var(self) -> tk.StringVar:
-        self.brush_status = tk.StringVar(value="Brush: tile=0, entity=0, shootable=0")
+        self.brush_status = tk.StringVar(value="Brush layer: tile; tile=0, entity=0, shootable=0")
         return self.brush_status
 
     # ---------------------------------------------------------------------
@@ -352,18 +425,20 @@ class DrRiptideEditor(tk.Tk):
         except Exception as exc:
             messagebox.showerror("Load failed", str(exc))
             return
-        self.map_list.delete(0, tk.END)
-        for entry in self.dat.maps():
+        self.map_entries = self.dat.maps()
+        combo_values = []
+        for entry in self.map_entries:
             info = map_info(entry.filename)
-            self.map_list.insert(tk.END, f"{entry.filename:<8}  {info.title}")
+            combo_values.append(f"{entry.filename:<8}  {info.title}")
+        self.map_combo.configure(values=combo_values)
         self.sprite_list.delete(0, tk.END)
         for entry in self.dat.sprites():
             self.sprite_list.insert(tk.END, entry.filename)
         self.refresh_object_browser()
         self.refresh_archive_browser()
         self.status_var.set(f"Loaded {path} ({len(self.dat.entries)} files, {len(self.occurrences)} object/event occurrences)")
-        if self.dat.maps():
-            self.map_list.selection_set(0)
+        if self.map_entries:
+            self.map_combo.current(0)
             self._on_map_select(None)
 
     def _prime_object_db_from_occurrences(self) -> None:
@@ -374,16 +449,19 @@ class DrRiptideEditor(tk.Tk):
     def _on_map_select(self, _event) -> None:
         if not self.dat:
             return
-        selected = self.map_list.curselection()
-        if not selected:
+        index = self.map_combo.current()
+        if index < 0 or index >= len(self.map_entries):
             return
-        entry = self.dat.maps()[selected[0]]
+        entry = self.map_entries[index]
         try:
             self.current_map = RiptideMap(entry)
             self.current_entry = entry
             self.dirty = False
             self.last_selected_cell = None
             self.selected_trigger_index = None
+            self.pending_trigger_index = None
+            self.map_base_image = None
+            self.map_base_key = None
         except Exception as exc:
             messagebox.showerror("Map load failed", str(exc))
             return
@@ -398,6 +476,7 @@ class DrRiptideEditor(tk.Tk):
         self.sprite_cache.clear()
         self.refresh_map()
         self.refresh_tile_atlas()
+        self.refresh_object_atlases()
         self.refresh_triggers()
         self.refresh_logic_workspace()
         self.refresh_quick_objects()
@@ -439,7 +518,7 @@ class DrRiptideEditor(tk.Tk):
         px = cx * tile + tile // 2 - spr.width // 2
         py = cy * tile + tile - spr.height
         if kind == "shootable":
-            py = cy * tile + tile // 2 - spr.height // 2
+            py = cy * tile + tile - spr.height - max(1, scale * 3)
         img.alpha_composite(spr, (px, py))
 
     def refresh_map(self) -> None:
@@ -447,7 +526,11 @@ class DrRiptideEditor(tk.Tk):
         if not rmap or not hasattr(self, "map_canvas"):
             return
         scale = max(1, int(self.scale_var.get()))
-        img = rmap.render(scale=scale).convert("RGBA")
+        base_key = (id(rmap), scale)
+        if self.map_base_image is None or self.map_base_key != base_key:
+            self.map_base_image = rmap.render(scale=scale).convert("RGBA")
+            self.map_base_key = base_key
+        img = self.map_base_image.copy()
         draw = ImageDraw.Draw(img, "RGBA")
         tile = 8 * scale
 
@@ -497,6 +580,8 @@ class DrRiptideEditor(tk.Tk):
 
         if self.show_triggers_var.get():
             for index, value, x, y, _even in rmap.nonzero_triggers():
+                if index in MESSAGE_CONTENT_SLOTS:
+                    continue
                 if 0 <= x < rmap.width and 0 <= y < rmap.height and self._should_draw_object("trigger", index):
                     px, py = x * tile, y * tile
                     outline = (0, 255, 255, 255)
@@ -601,6 +686,66 @@ class DrRiptideEditor(tk.Tk):
         self.tile_canvas.delete("all")
         self.tile_canvas.create_image(0, 0, image=self.tile_atlas_photo, anchor="nw")
         self.tile_canvas.config(scrollregion=(0, 0, img.width, img.height))
+        if hasattr(self, "asset_tile_canvas"):
+            self.asset_tile_canvas.delete("all")
+            self.asset_tile_canvas.create_image(0, 0, image=self.tile_atlas_photo, anchor="nw")
+            self.asset_tile_canvas.config(scrollregion=(0, 0, img.width, img.height))
+
+    def refresh_object_atlases(self) -> None:
+        self._atlas_refs.clear()
+        self._draw_object_atlas("shootable")
+        self._draw_object_atlas("entity")
+
+    def _object_ids_for_atlas(self, kind: str) -> list[int]:
+        ids = {o.object_id for o in self.occurrences if o.kind == kind}
+        ids.update(rec.object_id for rec in self.object_db.records.values() if rec.kind == kind)
+        if kind == "shootable":
+            ids.update(DOOR_SWITCH_TO_ENTITY.keys())
+        return sorted(i for i in ids if i > 0)
+
+    def _draw_object_atlas(self, kind: str) -> None:
+        canvas = getattr(self, f"{kind}_canvas", None)
+        if canvas is None:
+            return
+        canvas.delete("all")
+        rmap = self.current_map
+        if not rmap:
+            return
+        cols = 3
+        card_w = 122
+        card_h = 104
+        pad = 8
+        selected_id = self.selected_shootable_var.get() if kind == "shootable" else self.selected_entity_var.get()
+        for idx, object_id in enumerate(self._object_ids_for_atlas(kind)):
+            col = idx % cols
+            row = idx // cols
+            x = pad + col * card_w
+            y = pad + row * card_h
+            tag = f"atlas:{kind}:{object_id}"
+            is_selected = object_id == selected_id and self.active_layer_var.get() == kind
+            outline = "#f7d04a" if is_selected else "#5b6470"
+            canvas.create_rectangle(x, y, x + card_w - pad, y + card_h - pad, fill="#1f2328", outline=outline, width=2, tags=(tag,))
+            rec = self.object_db.get(kind, object_id)
+            sprite_name = rec.sprite or (shootable_sprite_name(object_id, True) if kind == "shootable" else entity_sprite_name(object_id, True))
+            sprite = self._sprite_first_frame(sprite_name)
+            if sprite:
+                max_w, max_h = 54, 48
+                scale = max(1, min(max_w // max(1, sprite.width), max_h // max(1, sprite.height)))
+                preview = sprite.resize((sprite.width * scale, sprite.height * scale), Image.Resampling.NEAREST)
+                photo = ImageTk.PhotoImage(preview)
+                self._atlas_refs.append(photo)
+                canvas.create_image(x + 14 + max_w // 2, y + 8 + max_h // 2, image=photo, anchor="center", tags=(tag,))
+            else:
+                prefix = "S" if kind == "shootable" else "E"
+                canvas.create_rectangle(x + 18, y + 14, x + 66, y + 54, fill="#39414d", outline="#77808d", tags=(tag,))
+                canvas.create_text(x + 42, y + 34, text=f"{prefix}{object_id}", fill="white", tags=(tag,))
+            name = rec.name or f"{kind.title()} {object_id}"
+            short_name = name if len(name) <= 18 else name[:17] + "..."
+            prefix = "S" if kind == "shootable" else "E"
+            canvas.create_text(x + 8, y + 64, text=f"{prefix}{object_id}", fill="#f7d04a", anchor="nw", tags=(tag,))
+            canvas.create_text(x + 8, y + 82, text=short_name, fill="#e6edf3", anchor="nw", tags=(tag,))
+        rows = (len(self._object_ids_for_atlas(kind)) + cols - 1) // cols
+        canvas.config(scrollregion=(0, 0, cols * card_w + pad, max(1, rows) * card_h + pad))
 
     def refresh_triggers(self) -> None:
         for item in self.trigger_tree.get_children():
@@ -608,8 +753,27 @@ class DrRiptideEditor(tk.Tk):
         rmap = self.current_map
         if not rmap:
             return
-        for index, value, x, y, _even in rmap.nonzero_triggers():
-            self.trigger_tree.insert("", "end", iid=f"trigger:{index}", values=(index, value, x, y, trigger_name(index, value)))
+        for index in SPECIAL_TRIGGER_SLOTS:
+            if index >= len(rmap.triggers):
+                continue
+            value = rmap.triggers[index]
+            if index in MESSAGE_CONTENT_SLOTS:
+                x_text = "-"
+                y_text = "-"
+                label = trigger_name(index, value)
+            elif value:
+                x, y = rmap.trigger_xy(value)
+                x_text = str(x)
+                y_text = str(y)
+                label = trigger_name(index, value)
+            else:
+                x_text = ""
+                y_text = ""
+                label = trigger_name(index, value)
+            value_text = str(value) if value else ""
+            self.trigger_tree.insert("", "end", iid=f"trigger:{index}", values=(index, value_text, x_text, y_text, label))
+            if self.selected_trigger_index == index:
+                self.trigger_tree.selection_set(f"trigger:{index}")
 
     def refresh_quick_objects(self) -> None:
         for item in self.quick_object_tree.get_children():
@@ -754,6 +918,8 @@ class DrRiptideEditor(tk.Tk):
             if stats["doors"].get(eid) and not stats["switches"].get(sid):
                 problems.append(("info", f"Door E{eid} exists but there is no matching switch S{sid}; it may be opened elsewhere or intentionally locked."))
         for index, value, x, y, _even in rmap.nonzero_triggers():
+            if index in MESSAGE_CONTENT_SLOTS:
+                continue
             if not (0 <= x < rmap.width and 0 <= y < rmap.height):
                 problems.append(("error", f"Trigger T{index} points outside the map: value={value}, decoded={x},{y}."))
         if not problems:
@@ -776,44 +942,130 @@ class DrRiptideEditor(tk.Tk):
         return None
 
     def _on_map_click(self, event) -> None:
+        if self.tool_var.get() == "move":
+            self.map_canvas.scan_mark(event.x, event.y)
+            return
+        self._drag_seen.clear()
         cell_xy = self._canvas_to_cell(event)
+        if cell_xy and self.pending_trigger_index is not None:
+            self._place_pending_trigger(*cell_xy)
+            return
         if cell_xy:
             self._handle_cell_action(*cell_xy)
 
     def _on_map_drag(self, event) -> None:
-        if self.tool_var.get() in ("paint_tile", "paint_entity", "paint_shootable"):
+        if self.tool_var.get() == "move":
+            self.map_canvas.scan_dragto(event.x, event.y, gain=1)
+            return
+        if self.tool_var.get() in ("brush", "pick"):
             cell_xy = self._canvas_to_cell(event)
             if cell_xy:
                 self._handle_cell_action(*cell_xy)
+
+    def _on_map_release(self, _event) -> None:
+        self._drag_seen.clear()
+
+    def _on_map_right_click(self, event) -> None:
+        cell_xy = self._canvas_to_cell(event)
+        if cell_xy:
+            self._erase_cell_layer(*cell_xy)
+
+    def _on_map_motion(self, event) -> None:
+        cell_xy = self._canvas_to_cell(event)
+        if cell_xy and self.pending_trigger_index is not None:
+            self._show_special_preview(*cell_xy)
+        elif cell_xy and self.tool_var.get() == "brush":
+            self._show_brush_preview(*cell_xy)
+        else:
+            self._clear_preview()
 
     def _handle_cell_action(self, x: int, y: int) -> None:
         rmap = self.current_map
         if not rmap:
             return
         tool = self.tool_var.get()
-        if tool == "paint_tile":
-            rmap.set_cell(x, y, tile_id=self.selected_tile_var.get())
-            self.dirty = True
-        elif tool == "paint_entity":
-            rmap.set_cell(x, y, entity_id=self.selected_entity_var.get())
-            self.dirty = True
-        elif tool == "paint_shootable":
-            rmap.set_cell(x, y, shootable_id=self.selected_shootable_var.get())
-            self.dirty = True
+        layer = self.active_layer_var.get()
+        if tool == "brush":
+            key = (layer, x, y)
+            if key in self._drag_seen:
+                return
+            self._drag_seen.add(key)
+            if layer == "tile":
+                rmap.set_cell(x, y, tile_id=self.selected_tile_var.get())
+                self._mark_level_changed(tile_changed=True)
+            elif layer == "entity":
+                rmap.set_cell(x, y, entity_id=self.selected_entity_var.get())
+                self._mark_level_changed()
+            elif layer == "shootable":
+                rmap.set_cell(x, y, shootable_id=self.selected_shootable_var.get())
+                self._mark_level_changed()
         elif tool == "pick":
             cell = rmap.cell(x, y)
             self.selected_tile_var.set(cell.tile_id)
             self.selected_entity_var.set(cell.entity_id)
             self.selected_shootable_var.set(cell.shootable_id)
             self.refresh_tile_atlas()
-        self.select_cell(x, y)
-        if self.dirty:
-            self.occurrences = scan_archive(self.dat) if self.dat else []
-            self.refresh_object_browser()
-            self.refresh_quick_objects()
-            self.refresh_logic_workspace()
-        self.refresh_map()
+            self.refresh_object_atlases()
+        if tool in ("select", "pick", "brush"):
+            self.select_cell(x, y)
+        if tool in ("select", "pick"):
+            self.refresh_map()
         self._update_brush_status()
+
+    def _erase_cell_layer(self, x: int, y: int) -> None:
+        rmap = self.current_map
+        if not rmap:
+            return
+        layer = self.active_layer_var.get()
+        if layer == "tile":
+            rmap.set_cell(x, y, tile_id=0)
+            self._mark_level_changed(tile_changed=True)
+        elif layer == "entity":
+            rmap.set_cell(x, y, entity_id=0)
+            self._mark_level_changed()
+        elif layer == "shootable":
+            rmap.set_cell(x, y, shootable_id=0)
+            self._mark_level_changed()
+        self.select_cell(x, y)
+        self._update_brush_status()
+
+    def _mark_level_changed(self, *, tile_changed: bool = False) -> None:
+        self.dirty = True
+        if tile_changed:
+            self.map_base_image = None
+            self.map_base_key = None
+        self._schedule_map_refresh()
+        self._schedule_metadata_refresh()
+
+    def _mark_specials_changed(self) -> None:
+        self.dirty = True
+        self.occurrences = scan_archive(self.dat) if self.dat else []
+        self.refresh_triggers()
+        self.refresh_logic_workspace()
+        self.refresh_object_browser()
+        self.refresh_map()
+
+    def _schedule_map_refresh(self) -> None:
+        if self._refresh_after_id:
+            return
+        self._refresh_after_id = self.after(25, self._run_scheduled_map_refresh)
+
+    def _run_scheduled_map_refresh(self) -> None:
+        self._refresh_after_id = None
+        self.refresh_map()
+
+    def _schedule_metadata_refresh(self) -> None:
+        if self._metadata_after_id:
+            self.after_cancel(self._metadata_after_id)
+        self._metadata_after_id = self.after(250, self._run_scheduled_metadata_refresh)
+
+    def _run_scheduled_metadata_refresh(self) -> None:
+        self._metadata_after_id = None
+        self.occurrences = scan_archive(self.dat) if self.dat else []
+        self.refresh_object_browser()
+        self.refresh_quick_objects()
+        self.refresh_logic_workspace()
+        self.refresh_object_atlases()
 
     def select_cell(self, x: int, y: int) -> None:
         rmap = self.current_map
@@ -827,7 +1079,11 @@ class DrRiptideEditor(tk.Tk):
         self.entity_id_var.set(cell.entity_id)
         entity_sprite = entity_sprite_name(cell.entity_id, even)
         shootable_sprite = shootable_sprite_name(cell.shootable_id, even)
-        trigger_hits = [f"T{idx}: {trigger_name(idx, value)}" for idx, value, tx, ty, _even in rmap.nonzero_triggers() if tx == x and ty == y]
+        trigger_hits = [
+            f"T{idx}: {trigger_name(idx, value)}"
+            for idx, value, tx, ty, _even in rmap.nonzero_triggers()
+            if idx not in MESSAGE_CONTENT_SLOTS and tx == x and ty == y
+        ]
         lines = [
             f"Cell: x={x}, y={y}",
             f"Tile: {cell.tile_id} ({'solid' if cell.is_solid else 'passable/background'})",
@@ -854,6 +1110,8 @@ class DrRiptideEditor(tk.Tk):
             messagebox.showerror("Invalid cell values", str(exc))
             return
         self.dirty = True
+        self.map_base_image = None
+        self.map_base_key = None
         self.occurrences = scan_archive(self.dat) if self.dat else []
         self.select_cell(x, y)
         self.refresh_object_browser()
@@ -869,7 +1127,12 @@ class DrRiptideEditor(tk.Tk):
 
     def _update_brush_status(self) -> None:
         if hasattr(self, "brush_status"):
-            self.brush_status.set(f"Brush: tile={self.selected_tile_var.get()}, entity={self.selected_entity_var.get()}, shootable={self.selected_shootable_var.get()}")
+            self.brush_status.set(
+                f"Brush layer: {self.active_layer_var.get()}; "
+                f"tile={self.selected_tile_var.get()}, "
+                f"entity={self.selected_entity_var.get()}, "
+                f"shootable={self.selected_shootable_var.get()}"
+            )
 
     def _on_tile_atlas_click(self, event) -> None:
         scale = 4
@@ -884,9 +1147,120 @@ class DrRiptideEditor(tk.Tk):
         tile_id = y * cols + x
         if 0 <= tile_id < 512:
             self.selected_tile_var.set(tile_id)
+            self.active_layer_var.set("tile")
+            self.tool_var.set("brush")
             self.refresh_tile_atlas()
+            self.refresh_object_atlases()
             self._update_brush_status()
             self.status_var.set(f"Selected tile {tile_id} for tile brush")
+
+    def _on_shootable_atlas_click(self, event) -> None:
+        self._select_object_from_atlas(event, "shootable")
+
+    def _on_entity_atlas_click(self, event) -> None:
+        self._select_object_from_atlas(event, "entity")
+
+    def _select_object_from_atlas(self, event, kind: str) -> None:
+        canvas = event.widget
+        current = canvas.find_withtag("current")
+        if not current:
+            return
+        tags = canvas.gettags(current[0])
+        tag = next((t for t in tags if t.startswith(f"atlas:{kind}:")), "")
+        if not tag:
+            return
+        object_id = int(tag.rsplit(":", 1)[1])
+        self._select_atlas_object(kind, object_id)
+
+    def _select_atlas_object(self, kind: str, object_id: int) -> None:
+        self.active_layer_var.set(kind)
+        self.tool_var.set("brush")
+        if kind == "shootable":
+            self.selected_shootable_var.set(object_id)
+        elif kind == "entity":
+            self.selected_entity_var.set(object_id)
+        self.highlight = (kind, object_id)
+        self.refresh_object_atlases()
+        self.refresh_map()
+        self._update_brush_status()
+        rec = self.object_db.get(kind, object_id)
+        prefix = "S" if kind == "shootable" else "E"
+        self.status_var.set(f"Brush: {prefix}{object_id} {rec.name}")
+
+    def _on_editor_side_tab_changed(self, _event) -> None:
+        if not hasattr(self, "editor_side_notebook"):
+            return
+        tab_text = self.editor_side_notebook.tab(self.editor_side_notebook.select(), "text")
+        if tab_text == "Tiles":
+            self.active_layer_var.set("tile")
+        elif tab_text == "Shootables":
+            self.active_layer_var.set("shootable")
+        elif tab_text == "Entities":
+            self.active_layer_var.set("entity")
+        elif tab_text == "Specials":
+            self.active_layer_var.set("special")
+        self._update_brush_status()
+
+    def _clear_preview(self, _event=None) -> None:
+        if hasattr(self, "map_canvas"):
+            self.map_canvas.delete("brush_preview")
+        self._preview_items.clear()
+        self._preview_photo = None
+
+    def _show_brush_preview(self, x: int, y: int) -> None:
+        rmap = self.current_map
+        if not rmap:
+            return
+        self._clear_preview()
+        scale = max(1, int(self.scale_var.get()))
+        tile = 8 * scale
+        px, py = x * tile, y * tile
+        layer = self.active_layer_var.get()
+        img = self._brush_preview_image(layer, x, y, scale)
+        if img:
+            self._preview_photo = ImageTk.PhotoImage(img)
+            offset_x = px
+            offset_y = py
+            if layer == "entity":
+                offset_x = px + tile // 2 - img.width // 2
+                offset_y = py + tile - img.height
+            elif layer == "shootable":
+                offset_x = px + tile // 2 - img.width // 2
+                offset_y = py + tile - img.height - max(1, scale * 3)
+            self.map_canvas.create_image(offset_x, offset_y, image=self._preview_photo, anchor="nw", tags=("brush_preview",))
+        self.map_canvas.create_rectangle(px, py, px + tile - 1, py + tile - 1, outline="#f7d04a", width=max(2, scale), tags=("brush_preview",))
+
+    def _show_special_preview(self, x: int, y: int) -> None:
+        self._clear_preview()
+        scale = max(1, int(self.scale_var.get()))
+        tile = 8 * scale
+        px, py = x * tile, y * tile
+        index = self.pending_trigger_index
+        label = f"T{index}" if index is not None else "T"
+        self.map_canvas.create_oval(px + 2, py + 2, px + tile - 3, py + tile - 3, outline="#f7d04a", width=max(2, scale), tags=("brush_preview",))
+        self.map_canvas.create_text(px + tile // 2, py + tile // 2, text=label, fill="#ffffff", tags=("brush_preview",))
+
+    def _brush_preview_image(self, layer: str, x: int, y: int, scale: int) -> Image.Image | None:
+        rmap = self.current_map
+        if not rmap:
+            return None
+        if layer == "tile":
+            img = rmap.tile_image(self.selected_tile_var.get(), scale=scale).convert("RGBA")
+        else:
+            even = ((y * rmap.width + x) % 2) == 0
+            if layer == "shootable":
+                sprite_name = shootable_sprite_name(self.selected_shootable_var.get(), even)
+            elif layer == "entity":
+                sprite_name = entity_sprite_name(self.selected_entity_var.get(), even)
+            else:
+                return None
+            sprite = self._sprite_first_frame(sprite_name)
+            if not sprite:
+                return None
+            img = sprite.resize((sprite.width * scale, sprite.height * scale), Image.Resampling.NEAREST).convert("RGBA")
+        alpha = img.getchannel("A").point(lambda value: min(value, 145))
+        img.putalpha(alpha)
+        return img
 
     # ---------------------------------------------------------------------
     # Selection callbacks
@@ -962,10 +1336,12 @@ class DrRiptideEditor(tk.Tk):
         object_id = int(raw_id)
         if kind == "entity":
             self.selected_entity_var.set(object_id)
-            self.tool_var.set("paint_entity")
+            self.active_layer_var.set("entity")
         elif kind == "shootable":
             self.selected_shootable_var.set(object_id)
-            self.tool_var.set("paint_shootable")
+            self.active_layer_var.set("shootable")
+        self.tool_var.set("brush")
+        self.refresh_object_atlases()
         self._update_brush_status()
 
     def _on_occurrence_select(self, _event) -> None:
@@ -983,10 +1359,117 @@ class DrRiptideEditor(tk.Tk):
         if iid.startswith("trigger:"):
             self.selected_trigger_index = int(iid.split(":", 1)[1])
             value = self.current_map.triggers[self.selected_trigger_index]
-            x, y = self.current_map.trigger_xy(value)
             self.highlight = ("trigger", self.selected_trigger_index)
-            self.select_cell(x, y)
+            self._sync_message_combo_from_trigger()
+            if self.selected_trigger_index not in MESSAGE_CONTENT_SLOTS and value:
+                x, y = self.current_map.trigger_xy(value)
+                if 0 <= x < self.current_map.width and 0 <= y < self.current_map.height:
+                    self.select_cell(x, y)
+                    self._scroll_to_cell(x, y)
+            self.special_status_var.set(f"Selected T{self.selected_trigger_index}: {trigger_name(self.selected_trigger_index, value)}")
             self.refresh_map()
+
+    def _selected_trigger_index_from_tree(self) -> int | None:
+        selected = self.trigger_tree.selection()
+        if not selected:
+            return self.selected_trigger_index
+        iid = selected[0]
+        if iid.startswith("trigger:"):
+            return int(iid.split(":", 1)[1])
+        return None
+
+    def _arm_selected_trigger_placement(self) -> None:
+        index = self._selected_trigger_index_from_tree()
+        if index is None:
+            self.special_status_var.set("Select a special point first")
+            return
+        if index in MESSAGE_CONTENT_SLOTS:
+            self.special_status_var.set("This row stores message text, not a map position")
+            return
+        self.pending_trigger_index = index
+        self.highlight = ("trigger", index)
+        self.tool_var.set("select")
+        self.workspace.select(0)
+        self.special_status_var.set(f"Click the map to place T{index}: {trigger_name(index, self.current_map.triggers[index] if self.current_map else 0)}")
+        self.refresh_map()
+
+    def _move_selected_trigger_to_cell(self) -> None:
+        if not self.last_selected_cell:
+            self.special_status_var.set("Select a map cell first")
+            return
+        index = self._selected_trigger_index_from_tree()
+        if index is None:
+            self.special_status_var.set("Select a special point first")
+            return
+        if index in MESSAGE_CONTENT_SLOTS:
+            self.special_status_var.set("This row stores message text, not a map position")
+            return
+        self._set_trigger_xy(index, *self.last_selected_cell)
+
+    def _clear_selected_trigger(self) -> None:
+        if not self.current_map:
+            return
+        index = self._selected_trigger_index_from_tree()
+        if index is None:
+            self.special_status_var.set("Select a special point first")
+            return
+        self.current_map.set_trigger(index, 0)
+        self.pending_trigger_index = None
+        self.highlight = ("trigger", index)
+        self.special_status_var.set(f"Cleared T{index}")
+        self._mark_specials_changed()
+
+    def _place_pending_trigger(self, x: int, y: int) -> None:
+        index = self.pending_trigger_index
+        if index is None:
+            return
+        self.pending_trigger_index = None
+        self._set_trigger_xy(index, x, y)
+
+    def _set_trigger_xy(self, index: int, x: int, y: int) -> None:
+        if not self.current_map:
+            return
+        self.current_map.set_trigger_xy(index, x, y)
+        self.selected_trigger_index = index
+        self.highlight = ("trigger", index)
+        self.select_cell(x, y)
+        self.special_status_var.set(f"Moved T{index} to {x},{y}: {trigger_name(index, self.current_map.triggers[index])}")
+        self._mark_specials_changed()
+
+    def _sync_message_combo_from_trigger(self) -> None:
+        if not self.current_map:
+            return
+        content_index = self._message_content_index_for_selected()
+        if content_index is None:
+            return
+        value = self.current_map.triggers[content_index]
+        self.message_id_var.set(f"{value}: {message_by_id(value)}")
+
+    def _message_content_index_for_selected(self) -> int | None:
+        index = self.selected_trigger_index
+        if index is None:
+            return None
+        if index in MESSAGE_CONTENT_SLOTS:
+            return index
+        return MESSAGE_POSITION_TO_CONTENT.get(index)
+
+    def _on_message_content_select(self, _event) -> None:
+        if not self.current_map:
+            return
+        content_index = self._message_content_index_for_selected()
+        if content_index is None:
+            self.special_status_var.set("Select a message position/content row first")
+            return
+        raw = self.message_id_var.get().split(":", 1)[0].strip()
+        try:
+            message_id = int(raw)
+        except ValueError:
+            return
+        self.current_map.set_trigger(content_index, message_id)
+        self.selected_trigger_index = content_index
+        self.highlight = ("trigger", content_index)
+        self.special_status_var.set(f"Set T{content_index} message to {message_id}: {message_by_id(message_id)}")
+        self._mark_specials_changed()
 
     def _on_logic_select(self, _event) -> None:
         selected = self.logic_tree.selection()
@@ -1024,11 +1507,9 @@ class DrRiptideEditor(tk.Tk):
     def _jump_to_map_cell(self, map_name: str, x: int, y: int) -> None:
         if not self.dat:
             return
-        for idx, entry in enumerate(self.dat.maps()):
+        for idx, entry in enumerate(self.map_entries or self.dat.maps()):
             if entry.filename == map_name:
-                self.map_list.selection_clear(0, tk.END)
-                self.map_list.selection_set(idx)
-                self.map_list.see(idx)
+                self.map_combo.current(idx)
                 self._on_map_select(None)
                 self.select_cell(x, y)
                 self._scroll_to_cell(x, y)
@@ -1057,8 +1538,13 @@ class DrRiptideEditor(tk.Tk):
         if not self.current_map:
             return
         self.refresh_logic_workspace()
-        self.workspace.select(1)
-        self.status_var.set("Validation refreshed in LOGIC workspace")
+        self.workspace.select(0)
+        if hasattr(self, "editor_side_notebook"):
+            for idx in range(self.editor_side_notebook.index("end")):
+                if self.editor_side_notebook.tab(idx, "text") == "Logic":
+                    self.editor_side_notebook.select(idx)
+                    break
+        self.status_var.set("Validation refreshed in the Logic panel")
 
     def export_png(self) -> None:
         if not self.current_map:
